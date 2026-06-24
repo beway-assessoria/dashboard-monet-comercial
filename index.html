@@ -256,7 +256,15 @@ tbody tr:hover td{background:var(--bg2)}
 
   <div class="tab-pane" id="tab-lista">
     <div class="table-card">
-      <div class="table-head"><span style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Carteira de ECs — dados completos</span><span id="lista-count" style="font-size:12px;color:var(--text3)"></span></div>
+      <div class="table-head">
+        <span style="font-size:12px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.06em">Carteira de ECs — dados completos</span>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select class="filter-select" id="lista-filter-pos" onchange="renderListaTable()"><option value="all">Toda situação POS</option></select>
+          <select class="filter-select" id="lista-filter-status" onchange="renderListaTable()"><option value="all">Todo status</option></select>
+          <button class="copy-btn" style="margin-top:0" onclick="clearListaFilters()">Limpar</button>
+          <span id="lista-count" style="font-size:11px;color:var(--text3)"></span>
+        </div>
+      </div>
       <div class="table-wrap"><table><thead><tr><th>Cód.</th><th>Estabelecimento</th><th>Consultor</th><th>Meta TPV</th><th>Doc.</th><th>Nicho</th><th>POS</th><th>Cadastro</th><th>Status</th></tr></thead><tbody id="tbody-lista"></tbody></table></div>
     </div>
   </div>
@@ -452,9 +460,65 @@ function fmtFone(f){
   return f;
 }
 
+function posGroup(p){
+  if(!p)return'Sem POS';var u=p.toUpperCase();
+  if(u.includes('ENTREGUE'))return'POS entregue';
+  if(u.includes('COM TIME'))return'POS com time';
+  if(u.includes('AGUARDANDO'))return'Aguardando chegar';
+  if(u.includes('APROVA'))return'Em aprovação';
+  if(u.includes('CADASTRANDO'))return'Cadastrando ficha';
+  if(u.includes('CONFERIR'))return'Conferir dados';
+  if(u.includes('CNAE'))return'CNAE inválido';
+  if(u.includes('RECUSADO'))return'Recusado';
+  if(u.includes('VISITAR'))return'Precisa visitar';
+  if(u.includes('INFORMAR')||u.includes('SOLICITAR'))return'Pendência';
+  return'Outro';
+}
+function statusGroup(s){
+  if(!s)return'Sem status';
+  if(s.includes('Negociando'))return'Negociando taxa';
+  if(s.includes('Faltam Dados'))return'Faltam dados';
+  if(s.includes('Transição'))return'Transição FiServ';
+  if(s.includes('RECUSADO'))return'Recusado';
+  if(s.includes('CNAE'))return'CNAE inválido';
+  if(s.includes('CONFERIR'))return'Conferir';
+  if(s.includes('Solicitou'))return'Solicitou POS';
+  if(s.includes('não usa')||s.includes('EC não'))return'Sem e-mail';
+  if(s.includes('NÃO CADASTRADO'))return'Não cadastrado';
+  if(s.includes('Domicílio'))return'Domicílio bancário';
+  return'Outro';
+}
+let LISTA_DATA=[];
+function fillFilter(selId,groupFn){
+  const sel=document.getElementById(selId);
+  const cur=sel.value;
+  const counts={};
+  LISTA_DATA.forEach(r=>{const g=groupFn(r);counts[g]=(counts[g]||0)+1;});
+  const keys=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  const first=sel.options[0].outerHTML;
+  sel.innerHTML=first+keys.map(k=>'<option value="'+k+'">'+k+' ('+counts[k]+')</option>').join('');
+  sel.value=[...sel.options].some(o=>o.value===cur)?cur:'all';
+}
 function renderLista(data){
-  document.getElementById('lista-count').textContent=data.length+' ECs';
-  document.getElementById('tbody-lista').innerHTML=data.map(r=>'<tr><td style="color:var(--text3);font-size:12px">'+r.c+'</td><td class="ec-name">'+r.e+'</td><td style="font-size:12px;color:var(--text2)">'+(r.k||'&mdash;')+'</td><td style="font-weight:600;white-space:nowrap;font-size:12px">'+(r.m?brl(r.m):'&mdash;')+'</td><td><span class="badge '+(r.t==='CNPJ'?'b-blue':'b-purple')+'">'+(r.t||'&mdash;')+'</span></td><td style="font-size:11px;color:var(--text2)">'+r.n+'</td><td>'+posBadge(r.p)+'</td><td style="font-size:12px;color:var(--text3);white-space:nowrap">'+(r.d||'&mdash;')+'</td><td>'+statusBadge(r.s)+'</td></tr>').join('');
+  LISTA_DATA=data;
+  fillFilter('lista-filter-pos',r=>posGroup(r.p));
+  fillFilter('lista-filter-status',r=>statusGroup(r.s));
+  renderListaTable();
+}
+function renderListaTable(){
+  const fp=document.getElementById('lista-filter-pos').value;
+  const fs=document.getElementById('lista-filter-status').value;
+  let rows=LISTA_DATA.slice();
+  if(fp!=='all')rows=rows.filter(r=>posGroup(r.p)===fp);
+  if(fs!=='all')rows=rows.filter(r=>statusGroup(r.s)===fs);
+  const active=(fp!=='all'||fs!=='all');
+  document.getElementById('lista-count').innerHTML=active?'<strong style="color:var(--gold)">'+rows.length+'</strong> de '+LISTA_DATA.length+' ECs':rows.length+' ECs';
+  document.getElementById('tbody-lista').innerHTML=rows.map(r=>'<tr><td style="color:var(--text3);font-size:12px">'+r.c+'</td><td class="ec-name">'+r.e+'</td><td style="font-size:12px;color:var(--text2)">'+(r.k||'&mdash;')+'</td><td style="font-weight:600;white-space:nowrap;font-size:12px">'+(r.m?brl(r.m):'&mdash;')+'</td><td><span class="badge '+(r.t==='CNPJ'?'b-blue':'b-purple')+'">'+(r.t||'&mdash;')+'</span></td><td style="font-size:11px;color:var(--text2)">'+r.n+'</td><td>'+posBadge(r.p)+'</td><td style="font-size:12px;color:var(--text3);white-space:nowrap">'+(r.d||'&mdash;')+'</td><td>'+statusBadge(r.s)+'</td></tr>').join('');
+}
+function clearListaFilters(){
+  document.getElementById('lista-filter-pos').value='all';
+  document.getElementById('lista-filter-status').value='all';
+  renderListaTable();
 }
 
 const MSG='Equipe, preciso que TODOS registrem a devolutiva de cada visita no mesmo dia (interesse, taxa solicitada, melhor horário de retorno ou motivo da recusa). Giovanna e Hugo: as prospecções de vocês estão sem feedback e sem isso não consigo priorizar os leads quentes nem reportar a conversão real à diretoria. A partir de amanhã, vamos preencher a coluna de devolutiva em todos os contatos. Conto com voces!';
